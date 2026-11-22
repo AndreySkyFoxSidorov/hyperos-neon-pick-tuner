@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://github.com/AndreySkyFoxSidorov/hyperos-neon-pick-tuner/releases/latest"><b>Download the APK</b></a>
   ·
-  Kotlin · no third-party libraries · ~100 KB
+  Kotlin · no third-party libraries · ~200 KB APK
 </p>
 
 ---
@@ -41,7 +41,7 @@
   - note-stability filter.
 - **Settings:** sensitivity, smoothing, *needle lerp* (pick inertia, almost off by default) and the A4 reference (415–466 Hz).
 - **Two screens at once.** On the Xiaomi 18 Pro Max a compact tuner runs on the rear display, and both screens stay awake while the app is open.
-- **Small.** The release APK is about 100 KB. It uses plain Android Views and the Kotlin stdlib, with no other libraries.
+- **Small.** The release APK is about 200 KB. It uses plain Android Views and the Kotlin stdlib, with no other libraries.
 
 ## Install
 
