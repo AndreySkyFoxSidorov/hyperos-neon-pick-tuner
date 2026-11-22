@@ -133,6 +133,8 @@ class TunerService : Service() {
         val text = TunerEngine.noteName(r.midi) + TunerEngine.octave(r.midi) +
             String.format(Locale.US, "  %+.0f¢", r.cents)
         // Notifications are rate-limited by the system; ~2 updates per second is plenty.
+        // Only update when the user allowed notifications (the app never asks for it).
+        if (!nm.areNotificationsEnabled()) return
         if (text != lastNotifText && now - lastNotifTime > 500) {
             lastNotifText = text
             lastNotifTime = now

@@ -31,6 +31,11 @@ class Reading(
     val clarity: Float,
     val levelDb: Float,
     val timeMs: Long,
+    /** Effective noise gate (auto or manual) and the measured room noise floor, dBFS. */
+    val gateDb: Float = -60f,
+    val floorDb: Float = -90f,
+    /** Chord currently shown (held for a moment after it stops ringing), or null. */
+    val chord: Chord? = null,
 )
 
 /**
@@ -118,10 +123,13 @@ object TunerEngine {
         var detector: PitchDetector? = null
         var window = FloatArray(0)
         var sinceLast = 0
-        val smoother = Smoother()
         val hpf = HighPass()
         var hpfFor: Instrument? = null
-        var gateOpen = false
+        val chordDetector = ChordDetector(sampleRate)
+        val chordBuf = FloatArray(chordDetector.frameSize)
+        var chordTick = 0
+        var chord: Chord? = null
+        val tracker = NoteTracker()
 
         try {
             record.startRecording()
@@ -130,7 +138,7 @@ object TunerEngine {
                 if (detector == null || detector.windowSize != s.instrument.windowSize) {
                     detector = PitchDetector(sampleRate, s.instrument.windowSize)
                     window = FloatArray(s.instrument.windowSize)
-                    smoother.reset()
+                    tracker.reset()
                 }
                 if (hpfFor != s.instrument) {
                     // Cut well below the lowest note of the instrument (2nd-order Butterworth).
@@ -147,6 +155,8 @@ object TunerEngine {
                 // Slide the analysis window left and append the new samples.
                 System.arraycopy(window, n, window, 0, window.size - n)
                 System.arraycopy(chunk, 0, window, window.size - n, n)
+                System.arraycopy(chordBuf, n, chordBuf, 0, chordBuf.size - n)
+                System.arraycopy(chunk, 0, chordBuf, chordBuf.size - n, n)
                 sinceLast += n
                 if (sinceLast < hop) continue
                 sinceLast = 0
@@ -160,21 +170,27 @@ object TunerEngine {
 
                 val now = System.currentTimeMillis()
                 var reading: Reading? = null
-                // Noise gate with 4 dB hysteresis so a decaying note doesn't flicker on/off.
-                gateOpen = if (gateOpen) db >= s.gateDb - 4f else db >= s.gateDb
-                if (gateOpen) {
-                    val res = detector.detect(window, s.instrument.fMin, s.instrument.fMax)
-                    if (res != null && res.clarity >= s.minClarity) {
-                        val midiF = smoother.push(69f + 12f * (ln(res.frequency / s.a4) / ln(2f)), s.alpha, s.stableFrames)
-                        if (midiF != null) {
-                            val note = midiF.roundToInt()
-                            val cents = (midiF - note) * 100f
-                            val freq = s.a4 * Math.pow(2.0, ((midiF - 69f) / 12f).toDouble()).toFloat()
-                            reading = Reading(true, freq, note, cents, res.clarity, db, now)
-                        }
-                    } else smoother.miss()
-                } else smoother.miss()
-                publish(reading ?: Reading(false, 0f, 0, 0f, 0f, db, now))
+                val det = detector!!
+                val win = window
+                val midiF = tracker.process(db, s) { det.detect(win, s.instrument.fMin, s.instrument.fMax) }
+                if (midiF != null) {
+                    val note = midiF.roundToInt()
+                    val cents = (midiF - note) * 100f
+                    val freq = s.a4 * Math.pow(2.0, ((midiF - 69f) / 12f).toDouble()).toFloat()
+                    reading = Reading(true, freq, note, cents, 1f, db, now)
+                }
+                val gate = tracker.gateDb
+                val floor = tracker.floor
+                val gateOpen = tracker.gateOpen
+                // Chords: ~10 analyses per second on a 340 ms window.
+                if (++chordTick >= 4) {
+                    chordTick = 0
+                    chord = chordDetector.process(chordBuf, s.a4, gateOpen)
+                }
+                publish(
+                    if (reading != null) Reading(true, reading.frequency, reading.midi, reading.cents, reading.clarity, db, now, gate, floor.value, chord)
+                    else Reading(false, 0f, 0, 0f, 0f, db, now, gate, floor.value, chord)
+                )
             }
         } catch (e: Exception) {
             Log.e(TAG, "audio loop crashed", e)
@@ -195,11 +211,30 @@ object TunerEngine {
     private var demoPhase = 0.0
     private var demoT = 0.0
 
+    private val demoC = intArrayOf(48, 52, 55, 60, 64)
+    private val demoAm = intArrayOf(45, 52, 57, 60, 64)
+    private val demoChordPh = DoubleArray(6)
+
     private fun synthesize(buf: FloatArray, n: Int, sr: Int): Int {
         for (i in 0 until n) {
             demoT += 1.0 / sr
             val seg = (demoT / 4.0).toInt()            // a new "string" every 4 s
             val local = demoT - seg * 4.0
+            if (seg % 6 >= 4) {
+                // every 3rd pair of segments: a strummed chord (C, then Am)
+                val notes = if (seg % 6 == 4) demoC else demoAm
+                var s = 0.0
+                for ((k, m) in notes.withIndex()) {
+                    val t = local - k * 0.015
+                    if (t < 0) continue
+                    val f = 440.0 * Math.pow(2.0, (m - 69) / 12.0)
+                    demoChordPh[k] += 2 * Math.PI * f / sr
+                    val env = Math.exp(-t * 0.9) * if (local > 3.6) 0.0 else 0.12
+                    for (h in 1..5) s += env * Math.sin(demoChordPh[k] * h) * Math.pow(0.8, h - 1.0) / h
+                }
+                buf[i] = s.toFloat()
+                continue
+            }
             val base = doubleArrayOf(110.0, 146.83, 196.0, 82.41)[seg % 4]
             // starts 35 cents flat/sharp and is "tuned" towards pitch, with a little wobble
             val start = if (seg % 2 == 0) -35.0 else 28.0
@@ -217,60 +252,6 @@ object TunerEngine {
     private fun publish(r: Reading) {
         lastReading = r
         main.post { for (l in listeners) l.onReading(r) }
-    }
-
-    /**
-     * Median-of-3 to drop single-frame octave glitches, then an exponential filter
-     * in the log-frequency (semitone) domain. A jump of more than ~half a semitone
-     * is treated as a new note and resets the filter so the needle doesn't crawl.
-     */
-    private class Smoother {
-        private val last = FloatArray(5)
-        private val sorted = FloatArray(5)
-        private var count = 0
-        private var value = Float.NaN
-        private var misses = 0
-        private var candidate = Float.NaN
-        private var candidateFrames = 0
-
-        fun reset() {
-            count = 0; value = Float.NaN; misses = 0; candidate = Float.NaN; candidateFrames = 0
-        }
-
-        fun miss() {
-            if (++misses > 8) reset()
-        }
-
-        /**
-         * Returns the smoothed pitch (MIDI, fractional) or null while nothing stable is known yet.
-         * A new note (> half a semitone away) is only accepted after [stable] consistent frames,
-         * which kills one-off blips from room noise and pluck transients.
-         */
-        fun push(midi: Float, alpha: Float, stable: Int): Float? {
-            misses = 0
-            last[count % last.size] = midi
-            count++
-            val k = minOf(count, last.size)
-            System.arraycopy(last, 0, sorted, 0, k)
-            java.util.Arrays.sort(sorted, 0, k)
-            val m = sorted[k / 2] // running median
-
-            if (!value.isNaN() && abs(m - value) <= 0.5f) {
-                candidate = Float.NaN; candidateFrames = 0
-                value += alpha * (m - value)
-                return value
-            }
-            // Different note (or nothing yet): require it to persist.
-            if (!candidate.isNaN() && abs(m - candidate) <= 0.5f) candidateFrames++ else {
-                candidate = m; candidateFrames = 1
-            }
-            if (candidateFrames >= stable) {
-                value = m
-                candidate = Float.NaN; candidateFrames = 0
-                return value
-            }
-            return if (value.isNaN()) null else value
-        }
     }
 
     /** 2nd-order Butterworth high-pass (RBJ biquad), in place. */
@@ -301,8 +282,6 @@ object TunerEngine {
         }
     }
 
-    private val NOTE_NAMES = arrayOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
-
-    fun noteName(midi: Int): String = NOTE_NAMES[((midi % 12) + 12) % 12]
+    fun noteName(midi: Int): String = NoteNames.of(midi)
     fun octave(midi: Int): Int = Math.floorDiv(midi, 12) - 1
 }

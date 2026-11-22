@@ -4,6 +4,15 @@
     <string name="title">NEON·TUNER</string>
     <string name="settings">Settings</string>
     <string name="rear_toggle">Rear screen tuner</string>
+    <string name="close">Close</string>
+    <string name="sec_input">Input</string>
+    <string name="sec_pick">Pick and pitch</string>
+    <string name="sec_chords">Chords</string>
+    <string name="sec_rear">Rear screen</string>
+    <string name="auto_gate">Auto noise gate (follows the room noise)</string>
+    <string name="chords_switch">Show chord diagrams</string>
+    <string name="chords_hint">Strum a chord: its name and fingering appear in the bottom-right corner. Guitar shapes for every preset except Ukulele, which shows ukulele shapes. Numbers on the dots are fingers (1 = index), the bar is a barre, × = muted string, ○ = open string.</string>
+    <string name="gate_hint_auto">The threshold follows the measured room noise. A plucked note stays tracked while it fades, so quiet strings are not cut off.</string>
     <string name="gate_hint">Sounds quieter than the threshold are ignored. Green bar = current input level: set the threshold just above the room noise.</string>
     <string name="sens_hint">High: piano, quiet and fading notes. Low: guitar or ukulele in a noisy room.</string>
     <string name="smooth_hint">Filters the pitch itself: higher = fewer note jumps from noise, but slower to react.</string>
@@ -12,6 +21,7 @@
     <string name="a4_ref">Reference A4, Hz</string>
     <string name="rear_switch">Mini tuner on the rear screen</string>
     <string name="inset_switch">Leave space for the camera island</string>
-    <string name="reset">Reset to preset</string>
+    <string name="reset">Reset preset</string>
+    <string name="reset_all">Reset to default</string>
     <string name="display_diag">Display diagnostics</string>
 </resources>

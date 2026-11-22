@@ -14,9 +14,9 @@ enum class Instrument(
 ) {
     // Piano: whole keyboard, long window for low strings, very sensitive (quiet decays, inharmonicity).
     PIANO("Piano", 26f, 4300f, 8192, 0.85f, 0.45f, -68f),
-    GUITAR("Guitar", 60f, 1400f, 4096, 0.55f, 0.60f, -52f),
-    UKULELE("Ukulele", 180f, 1400f, 4096, 0.35f, 0.65f, -45f),
-    BASS("Bass", 28f, 500f, 8192, 0.55f, 0.60f, -55f),
+    GUITAR("Guitar", 60f, 1400f, 4096, 0.65f, 0.55f, -55f),
+    UKULELE("Ukulele", 180f, 1400f, 4096, 0.45f, 0.60f, -50f),
+    BASS("Bass", 28f, 500f, 8192, 0.65f, 0.55f, -58f),
 }
 
 data class TunerSettings(
@@ -27,6 +27,9 @@ data class TunerSettings(
     val smoothing: Float = Instrument.GUITAR.defaultSmoothing,
     /** 0..1. Inertia of the pick/needle on screen. Near 0 = follows the pitch almost instantly. */
     val needleLerp: Float = 0.08f,
+    /** Auto noise gate: threshold follows the measured room noise + [autoMarginDb]. */
+    val autoGate: Boolean = true,
+    val autoMarginDb: Float = 8f,
     /** Noise gate in dBFS: anything quieter is ignored. -90 (everything) .. -20 (only loud). */
     val gateDb: Float = Instrument.GUITAR.defaultGateDb,
     /** High-pass filter below the instrument's range (rumble, hum, handling noise). */
@@ -34,6 +37,8 @@ data class TunerSettings(
     val a4: Float = 440f,
     /** Leave room for the camera island on the Xiaomi rear display. */
     val rearCameraInset: Boolean = true,
+    /** Show the chord diagram card when a chord is detected. */
+    val showChords: Boolean = true,
     /** Show the compact tuner on the rear display when one is available. */
     val rearEnabled: Boolean = true,
 ) {
@@ -67,10 +72,13 @@ data class TunerSettings(
             .putFloat("smoothing", smoothing)
             .putFloat("needleLerp", needleLerp)
             .putFloat("gateDb", gateDb)
+            .putBoolean("autoGate", autoGate)
+            .putFloat("autoMarginDb", autoMarginDb)
             .putBoolean("lowCut", lowCut)
             .putFloat("a4", a4)
             .putBoolean("rearInset", rearCameraInset)
             .putBoolean("rearEnabled", rearEnabled)
+            .putBoolean("showChords", showChords)
             .apply()
     }
 
@@ -87,10 +95,13 @@ data class TunerSettings(
                 smoothing = p.getFloat("smoothing", inst.defaultSmoothing),
                 needleLerp = p.getFloat("needleLerp", 0.08f),
                 gateDb = p.getFloat("gateDb", inst.defaultGateDb),
+                autoGate = p.getBoolean("autoGate", true),
+                autoMarginDb = p.getFloat("autoMarginDb", 8f),
                 lowCut = p.getBoolean("lowCut", true),
                 a4 = p.getFloat("a4", 440f),
                 rearCameraInset = p.getBoolean("rearInset", true),
                 rearEnabled = p.getBoolean("rearEnabled", true),
+                showChords = p.getBoolean("showChords", true),
             )
         }
     }

@@ -75,6 +75,12 @@ class TunerView @JvmOverloads constructor(context: Context, attrs: AttributeSet?
     private var shownMidi = -1
     private var lastFrameNanos = 0L
 
+    // chord card
+    private val chordCard = ChordCard(dp)
+    private val chordRect = RectF()
+    private var lastChord: com.neontuner.audio.Chord? = null
+    private var lastChordTime = 0L
+
     // ---------- layout rects ----------
     private val noteRect = RectF()
     private val scaleRect = RectF()
@@ -120,6 +126,7 @@ class TunerView @JvmOverloads constructor(context: Context, attrs: AttributeSet?
 
     override fun onReading(r: Reading) {
         lastReadingTime = r.timeMs
+        if (r.chord != null) { lastChord = r.chord; lastChordTime = r.timeMs }
         if (r.hasPitch) {
             current = r
             lastPitchTime = r.timeMs
@@ -223,6 +230,7 @@ class TunerView @JvmOverloads constructor(context: Context, attrs: AttributeSet?
         drawNote(canvas, now, age, live)
         drawScale(canvas, live, age)
         drawHistory(canvas, now)
+        drawChord(canvas, now)
 
         val needsMore = abs(target - shownCents) > 0.05f || now - lastReadingTime < (historySeconds * 1000).toLong()
         if (needsMore) postInvalidateOnAnimation()
@@ -303,7 +311,7 @@ class TunerView @JvmOverloads constructor(context: Context, attrs: AttributeSet?
         hTime[hHead] = now
         hCents[hHead] = shownCents
         hMidi[hHead] = shownMidi
-        hValid[hHead] = current != null && pitchAge < 160
+        hValid[hHead] = current != null && pitchAge < 260
         hHead = (hHead + 1) % cap
         if (hSize < cap) hSize++
     }
@@ -465,6 +473,31 @@ class TunerView @JvmOverloads constructor(context: Context, attrs: AttributeSet?
         }
         if (inRun) drawRunLabel(canvas, runStartX, runStartY, runMidi, r)
         canvas.restore()
+    }
+
+    /**
+     * Chord diagram in the bottom-right corner of the waterfall. Guitar shapes for every
+     * instrument except Ukulele (ukulele shapes). Stays for a few seconds, then fades.
+     */
+    private fun drawChord(canvas: Canvas, now: Long) {
+        if (!TunerEngine.settings.showChords) return
+        val chord = lastChord ?: return
+        val age = now - lastChordTime
+        val alpha = when {
+            age < 3000 -> 1f
+            age < 4500 -> 1f - (age - 3000) / 1500f
+            else -> return
+        }
+        val board = if (TunerEngine.settings.instrument == com.neontuner.audio.Instrument.UKULELE)
+            com.neontuner.audio.Fretboard.UKULELE else com.neontuner.audio.Fretboard.GUITAR
+        val r = historyRect
+        val m = (if (compact) 4f else 8f) * dp
+        val aspect = chordCard.aspect(compact)
+        var w = if (compact) r.width() * 0.18f else min(r.width() * 0.21f, 90f * dp)
+        if (w * aspect > r.height() - 2 * m) w = (r.height() - 2 * m) / aspect
+        chordRect.set(r.right - w - m, r.bottom - w * aspect - m, r.right - m, r.bottom - m)
+        chordCard.draw(canvas, chordRect, chord, board, alpha, compact)
+        if (age < 4500) postInvalidateOnAnimation()
     }
 
     /** Writes the note name where a held note began, so note changes are visible in the waterfall. */

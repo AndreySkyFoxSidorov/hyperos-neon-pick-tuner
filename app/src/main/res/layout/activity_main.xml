@@ -18,7 +18,8 @@
         android:orientation="horizontal"
         android:paddingStart="20dp"
         android:paddingTop="8dp"
-        android:paddingEnd="12dp">
+        android:paddingEnd="12dp"
+        android:paddingBottom="4dp">
 
         <TextView
             android:id="@+id/title"
@@ -53,35 +54,97 @@
             android:text="⚙" />
     </LinearLayout>
 
-    <!-- bottom: instrument chips + settings panel -->
+    <!-- instrument chips -->
     <LinearLayout
         android:id="@+id/bottom"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:orientation="vertical"
+        android:gravity="center"
+        android:orientation="horizontal"
         android:paddingStart="12dp"
+        android:paddingTop="6dp"
         android:paddingEnd="12dp"
         android:paddingBottom="8dp">
+
+        <LinearLayout
+            android:id="@+id/chips"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal" />
+    </LinearLayout>
+
+    <!-- settings sheet: fills the space between the bars; tapping outside the card closes it -->
+    <FrameLayout
+        android:id="@+id/panelHost"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#66000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
 
         <ScrollView
             android:id="@+id/panel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="10dp"
+            android:layout_gravity="bottom"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="12dp"
+            android:layout_marginBottom="8dp"
             android:background="@drawable/panel_bg"
-            android:visibility="gone">
+            android:clickable="true"
+            android:fadeScrollbars="false"
+            android:scrollbarThumbVertical="@drawable/scroll_thumb">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="18dp">
+                android:paddingStart="18dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="18dp"
+                android:paddingBottom="18dp">
 
-                <!-- noise gate + live input level -->
+                <!-- header with close button -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        style="@style/Header"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:text="@string/settings" />
+
+                    <TextView
+                        android:id="@+id/closeBtn"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:background="@drawable/close_bg"
+                        android:contentDescription="@string/close"
+                        android:gravity="center"
+                        android:text="✕"
+                        android:textColor="@color/magenta"
+                        android:textSize="20sp" />
+                </LinearLayout>
+
+                <!-- INPUT -->
+                <TextView style="@style/Section" android:text="@string/sec_input" />
+
+                <Switch
+                    android:id="@+id/autoGateSwitch"
+                    style="@style/NeonSwitch"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/auto_gate" />
+
                 <TextView
                     android:id="@+id/gateLabel"
-                    style="@style/Label" />
+                    style="@style/Label"
+                    android:layout_marginTop="8dp" />
 
                 <SeekBar
                     android:id="@+id/gate"
@@ -100,14 +163,19 @@
                     android:progressTint="@color/green" />
 
                 <TextView
+                    android:id="@+id/gateHint"
                     style="@style/Hint"
-                    android:layout_marginTop="4dp"
-                    android:text="@string/gate_hint" />
+                    android:layout_marginTop="4dp" />
+
+                <Switch
+                    android:id="@+id/lowCutSwitch"
+                    style="@style/NeonSwitch"
+                    android:text="@string/low_cut" />
 
                 <TextView
                     android:id="@+id/sensLabel"
                     style="@style/Label"
-                    android:layout_marginTop="14dp" />
+                    android:layout_marginTop="12dp" />
 
                 <SeekBar
                     android:id="@+id/sens"
@@ -118,10 +186,12 @@
                     style="@style/Hint"
                     android:text="@string/sens_hint" />
 
+                <!-- PICK -->
+                <TextView style="@style/Section" android:text="@string/sec_pick" />
+
                 <TextView
                     android:id="@+id/smoothLabel"
-                    style="@style/Label"
-                    android:layout_marginTop="14dp" />
+                    style="@style/Label" />
 
                 <SeekBar
                     android:id="@+id/smooth"
@@ -135,7 +205,7 @@
                 <TextView
                     android:id="@+id/lerpLabel"
                     style="@style/Label"
-                    android:layout_marginTop="14dp" />
+                    android:layout_marginTop="12dp" />
 
                 <SeekBar
                     android:id="@+id/lerp"
@@ -146,15 +216,10 @@
                     style="@style/Hint"
                     android:text="@string/lerp_hint" />
 
-                <Switch
-                    android:id="@+id/lowCutSwitch"
-                    style="@style/NeonSwitch"
-                    android:text="@string/low_cut" />
-
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
+                    android:layout_marginTop="12dp"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
@@ -181,9 +246,26 @@
                         android:text="+" />
                 </LinearLayout>
 
+                <!-- CHORDS -->
+                <TextView style="@style/Section" android:text="@string/sec_chords" />
+
+                <Switch
+                    android:id="@+id/chordsSwitch"
+                    style="@style/NeonSwitch"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/chords_switch" />
+
+                <TextView
+                    style="@style/Hint"
+                    android:text="@string/chords_hint" />
+
+                <!-- REAR SCREEN -->
+                <TextView style="@style/Section" android:text="@string/sec_rear" />
+
                 <Switch
                     android:id="@+id/rearSwitch"
                     style="@style/NeonSwitch"
+                    android:layout_marginTop="2dp"
                     android:text="@string/rear_switch" />
 
                 <Switch
@@ -199,7 +281,7 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
+                    android:layout_marginTop="16dp"
                     android:orientation="horizontal">
 
                     <TextView
@@ -209,18 +291,17 @@
                         android:text="@string/reset" />
 
                     <TextView
-                        android:id="@+id/probeBtn"
+                        android:id="@+id/resetAllBtn"
                         style="@style/Chip"
-                        android:text="@string/display_diag" />
+                        android:text="@string/reset_all" />
                 </LinearLayout>
+
+                <TextView
+                    android:id="@+id/probeBtn"
+                    style="@style/Chip"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/display_diag" />
             </LinearLayout>
         </ScrollView>
-
-        <LinearLayout
-            android:id="@+id/chips"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:orientation="horizontal" />
-    </LinearLayout>
+    </FrameLayout>
 </FrameLayout>

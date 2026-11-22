@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.Bundle
@@ -12,6 +13,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.Display
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.widget.LinearLayout
@@ -34,21 +36,24 @@ class MainActivity : Activity(), DisplayManager.DisplayListener {
 
     private lateinit var settings: TunerSettings
     private lateinit var tuner: TunerView
-    private lateinit var panel: View
+    private lateinit var panelHost: View
     private lateinit var chips: LinearLayout
     private lateinit var gate: SeekBar
     private lateinit var level: ProgressBar
     private lateinit var sens: SeekBar
     private lateinit var smooth: SeekBar
     private lateinit var lerp: SeekBar
-    private lateinit var lerpLabel: TextView
     private lateinit var gateLabel: TextView
+    private lateinit var gateHint: TextView
     private lateinit var sensLabel: TextView
     private lateinit var smoothLabel: TextView
+    private lateinit var lerpLabel: TextView
     private lateinit var a4Value: TextView
     private lateinit var a4Badge: TextView
     private lateinit var rearBadge: TextView
+    private lateinit var autoGateSwitch: Switch
     private lateinit var lowCutSwitch: Switch
+    private lateinit var chordsSwitch: Switch
     private lateinit var rearSwitch: Switch
     private lateinit var insetSwitch: Switch
     private lateinit var rearStatus: TextView
@@ -57,14 +62,16 @@ class MainActivity : Activity(), DisplayManager.DisplayListener {
     private val handler = Handler(Looper.getMainLooper())
     private var lastLevelUpdate = 0L
 
-    /** Live input level for the noise-gate meter (only while the panel is open). */
+    /** Live input level + effective gate for the settings panel (only while it is open). */
     private val levelListener = TunerEngine.Listener { r: Reading ->
-        if (panel.visibility != View.VISIBLE || r.timeMs - lastLevelUpdate < 100) return@Listener
+        if (panelHost.visibility != View.VISIBLE || r.timeMs - lastLevelUpdate < 100) return@Listener
         lastLevelUpdate = r.timeMs
         level.progress = (r.levelDb + 90f).roundToInt().coerceIn(0, 70)
-        level.progressTintList = android.content.res.ColorStateList.valueOf(
-            getColor(if (r.levelDb >= settings.gateDb) R.color.green else R.color.dim)
-        )
+        level.progressTintList = ColorStateList.valueOf(getColor(if (r.levelDb >= r.gateDb) R.color.green else R.color.dim))
+        if (settings.autoGate) {
+            gateLabel.text = "Noise gate  ·  auto ${r.gateDb.roundToInt()} dB   (room ${r.floorDb.roundToInt()} dB)"
+            gate.progress = (r.gateDb + 90f).roundToInt().coerceIn(0, 70)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -78,21 +85,24 @@ class MainActivity : Activity(), DisplayManager.DisplayListener {
         TunerEngine.demo = debuggable && intent.getBooleanExtra("demo", false)
 
         tuner = findViewById(R.id.tuner)
-        panel = findViewById(R.id.panel)
+        panelHost = findViewById(R.id.panelHost)
         chips = findViewById(R.id.chips)
         gate = findViewById(R.id.gate)
         level = findViewById(R.id.level)
         sens = findViewById(R.id.sens)
         smooth = findViewById(R.id.smooth)
         lerp = findViewById(R.id.lerp)
-        lerpLabel = findViewById(R.id.lerpLabel)
         gateLabel = findViewById(R.id.gateLabel)
+        gateHint = findViewById(R.id.gateHint)
         sensLabel = findViewById(R.id.sensLabel)
         smoothLabel = findViewById(R.id.smoothLabel)
+        lerpLabel = findViewById(R.id.lerpLabel)
         a4Value = findViewById(R.id.a4Value)
         a4Badge = findViewById(R.id.a4Badge)
         rearBadge = findViewById(R.id.rearBadge)
+        autoGateSwitch = findViewById(R.id.autoGateSwitch)
         lowCutSwitch = findViewById(R.id.lowCutSwitch)
+        chordsSwitch = findViewById(R.id.chordsSwitch)
         rearSwitch = findViewById(R.id.rearSwitch)
         insetSwitch = findViewById(R.id.insetSwitch)
         rearStatus = findViewById(R.id.rearStatus)
@@ -102,23 +112,36 @@ class MainActivity : Activity(), DisplayManager.DisplayListener {
 
         findViewById<View>(R.id.gear).setOnClickListener { togglePanel() }
         a4Badge.setOnClickListener { togglePanel() }
+        findViewById<View>(R.id.closeBtn).setOnClickListener { showPanel(false) }
+        panelHost.setOnClickListener { showPanel(false) } // tap outside the card
         rearBadge.setOnClickListener { update(settings.copy(rearEnabled = !settings.rearEnabled)) }
         findViewById<View>(R.id.a4Minus).setOnClickListener { update(settings.copy(a4 = (settings.a4 - 1f).coerceAtLeast(415f))) }
         findViewById<View>(R.id.a4Plus).setOnClickListener { update(settings.copy(a4 = (settings.a4 + 1f).coerceAtMost(466f))) }
         findViewById<View>(R.id.resetBtn).setOnClickListener { update(settings.withInstrument(settings.instrument)) }
+        // Everything back to factory defaults (Guitar preset, auto gate, chords and rear screen on).
+        findViewById<View>(R.id.resetAllBtn).setOnClickListener {
+            update(TunerSettings())
+            android.widget.Toast.makeText(this, "All settings reset to default", android.widget.Toast.LENGTH_SHORT).show()
+        }
         findViewById<View>(R.id.probeBtn).setOnClickListener { startActivity(Intent(this, DisplayProbeActivity::class.java)) }
 
-        gate.setOnSeekBarChangeListener(seek { p -> update(settings.copy(gateDb = -90f + p)) })
+        gate.setOnSeekBarChangeListener(seek { p -> update(settings.copy(gateDb = -90f + p, autoGate = false)) })
         sens.setOnSeekBarChangeListener(seek { p -> update(settings.copy(sensitivity = p / 100f)) })
         smooth.setOnSeekBarChangeListener(seek { p -> update(settings.copy(smoothing = p / 100f)) })
         lerp.setOnSeekBarChangeListener(seek { p -> update(settings.copy(needleLerp = p / 100f)) })
+        autoGateSwitch.setOnCheckedChangeListener { _, c -> if (c != settings.autoGate) update(settings.copy(autoGate = c)) }
         lowCutSwitch.setOnCheckedChangeListener { _, c -> if (c != settings.lowCut) update(settings.copy(lowCut = c)) }
+        chordsSwitch.setOnCheckedChangeListener { _, c -> if (c != settings.showChords) update(settings.copy(showChords = c)) }
         rearSwitch.setOnCheckedChangeListener { _, c -> if (c != settings.rearEnabled) update(settings.copy(rearEnabled = c)) }
         insetSwitch.setOnCheckedChangeListener { _, c -> if (c != settings.rearCameraInset) update(settings.copy(rearCameraInset = c)) }
 
         syncUi()
         requestNeededPermissions()
     }
+
+    /** Back gesture closes the settings sheet first (Android 13+ predictive back API). */
+    private val closePanelOnBack: Any? =
+        if (Build.VERSION.SDK_INT >= 33) android.window.OnBackInvokedCallback { showPanel(false) } else null
 
     // ---------------- lifecycle ----------------
 
@@ -166,10 +189,9 @@ class MainActivity : Activity(), DisplayManager.DisplayListener {
 
     private fun requestNeededPermissions() {
         val need = buildList {
+            // Only the microphone is asked for. The microphone service still runs without the
+            // notification permission (its status notification is just not shown in the shade).
             if (!hasMic()) add(Manifest.permission.RECORD_AUDIO)
-            if (Build.VERSION.SDK_INT >= 33 &&
-                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-            ) add(Manifest.permission.POST_NOTIFICATIONS)
         }
         if (need.isNotEmpty()) requestPermissions(need.toTypedArray(), 1)
     }
@@ -198,16 +220,21 @@ class MainActivity : Activity(), DisplayManager.DisplayListener {
         val gp = (settings.gateDb + 90f).roundToInt().coerceIn(0, 70)
         val sp = (settings.sensitivity * 100).roundToInt()
         val mp = (settings.smoothing * 100).roundToInt()
-        if (gate.progress != gp) gate.progress = gp
+        val lp = (settings.needleLerp * 100).roundToInt()
+        if (!settings.autoGate && gate.progress != gp) gate.progress = gp
         if (sens.progress != sp) sens.progress = sp
         if (smooth.progress != mp) smooth.progress = mp
-        val lp = (settings.needleLerp * 100).roundToInt()
         if (lerp.progress != lp) lerp.progress = lp
-        lerpLabel.text = "Needle lerp  ·  $lp%"
-        gateLabel.text = "Noise gate  ·  ${settings.gateDb.roundToInt()} dB"
+        autoGateSwitch.isChecked = settings.autoGate
+        gate.alpha = if (settings.autoGate) 0.45f else 1f
+        if (!settings.autoGate) gateLabel.text = "Noise gate  ·  ${settings.gateDb.roundToInt()} dB"
+        else if (gateLabel.text.isNullOrEmpty()) gateLabel.text = "Noise gate  ·  auto"
+        gateHint.setText(if (settings.autoGate) R.string.gate_hint_auto else R.string.gate_hint)
         sensLabel.text = "Sensitivity  ·  $sp%"
         smoothLabel.text = "Smoothing  ·  $mp%"
+        lerpLabel.text = "Needle lerp  ·  $lp%"
         lowCutSwitch.isChecked = settings.lowCut
+        chordsSwitch.isChecked = settings.showChords
         a4Value.text = settings.a4.roundToInt().toString()
         a4Badge.text = "A4 ${settings.a4.roundToInt()}"
         rearSwitch.isChecked = settings.rearEnabled
@@ -225,8 +252,18 @@ class MainActivity : Activity(), DisplayManager.DisplayListener {
         }
     }
 
-    private fun togglePanel() {
-        panel.visibility = if (panel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+    private fun togglePanel() = showPanel(panelHost.visibility != View.VISIBLE)
+
+    private fun showPanel(show: Boolean) {
+        if ((panelHost.visibility == View.VISIBLE) == show) return
+        panelHost.visibility = if (show) View.VISIBLE else View.GONE
+        findViewById<View>(R.id.gear).isSelected = show
+        if (Build.VERSION.SDK_INT >= 33) {
+            val cb = closePanelOnBack as android.window.OnBackInvokedCallback
+            if (show) onBackInvokedDispatcher.registerOnBackInvokedCallback(
+                android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, cb
+            ) else onBackInvokedDispatcher.unregisterOnBackInvokedCallback(cb)
+        }
     }
 
     private fun seek(onChange: (Int) -> Unit) = object : SeekBar.OnSeekBarChangeListener {
@@ -252,6 +289,17 @@ class MainActivity : Activity(), DisplayManager.DisplayListener {
             tuner.setPadding(0, bars.top + (56 * d).toInt(), 0, bars.bottom + (64 * d).toInt())
             insets
         }
+        // The settings sheet lives between the two bars, so both stay usable while it is open.
+        val relayout = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            val lp = panelHost.layoutParams as ViewGroup.MarginLayoutParams
+            if (lp.topMargin != top.height || lp.bottomMargin != bottom.height) {
+                lp.topMargin = top.height
+                lp.bottomMargin = bottom.height
+                panelHost.layoutParams = lp
+            }
+        }
+        top.addOnLayoutChangeListener(relayout)
+        bottom.addOnLayoutChangeListener(relayout)
     }
 
     // ---------------- rear screen ----------------
@@ -287,7 +335,6 @@ class MainActivity : Activity(), DisplayManager.DisplayListener {
             lastRearLaunch = now
             if (RearActivity.launchOn(this, display.displayId)) {
                 rearStatus.text = "Opening the mini tuner on display ${display.displayId}…"
-                // If the system silently aborted it, fall back to overlay / Presentation.
                 // Re-check: shows "showing" on success, falls back to overlay / Presentation otherwise.
                 handler.postDelayed({ updateRear() }, 1500)
                 return
