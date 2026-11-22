@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://github.com/AndreySkyFoxSidorov/hyperos-neon-pick-tuner/releases/latest"><b>Download the APK</b></a>
   ·
-  Kotlin · no third-party libraries · ~220 KB APK
+  Kotlin · no third-party libraries · ~220 KB APK · MIT license
 </p>
 
 ---
@@ -132,3 +132,7 @@ app/src/main/java/com/neontuner/
   TunerService.kt           microphone foreground service
   MainActivity.kt           main screen + settings
 ```
+
+## License
+
+[MIT](LICENSE) © 2026 AndreySkyFoxSidorov
